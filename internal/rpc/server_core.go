@@ -63,6 +63,8 @@ type Server struct {
 	localMode    bool
 	syncInterval string
 	daemonMode   string
+	// Authentication manager for RPC security
+	auth *AuthManager
 }
 
 // Mutation event types
@@ -119,6 +121,8 @@ func NewServer(socketPath string, store storage.Storage, workspacePath string, d
 		}
 	}
 
+	startTime := time.Now()
+
 	s := &Server{
 		socketPath:        socketPath,
 		workspacePath:     workspacePath,
@@ -126,7 +130,7 @@ func NewServer(socketPath string, store storage.Storage, workspacePath string, d
 		storage:           store,
 		shutdownChan:      make(chan struct{}),
 		doneChan:          make(chan struct{}),
-		startTime:         time.Now(),
+		startTime:         startTime,
 		metrics:           NewMetrics(),
 		maxConns:          maxConns,
 		connSemaphore:     make(chan struct{}, maxConns),
@@ -137,6 +141,15 @@ func NewServer(socketPath string, store storage.Storage, workspacePath string, d
 		maxMutationBuffer: 100,
 	}
 	s.lastActivityTime.Store(time.Now())
+
+	// Initialize authentication manager
+	auth, err := NewAuthManager(socketPath, startTime)
+	if err != nil {
+		// Log warning but continue - auth will be optional for backward compatibility
+		fmt.Fprintf(os.Stderr, "Warning: failed to initialize auth manager: %v\n", err)
+	}
+	s.auth = auth
+
 	return s
 }
 

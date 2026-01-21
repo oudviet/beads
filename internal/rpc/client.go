@@ -38,6 +38,7 @@ type Client struct {
 	timeout    time.Duration
 	dbPath     string // Expected database path for validation
 	actor      string // Actor for audit trail (who is performing operations)
+	authToken  string // Cached authentication token for daemon RPC
 }
 
 // TryConnect attempts to connect to the daemon socket
@@ -163,6 +164,27 @@ func (c *Client) SetActor(actor string) {
 	c.actor = actor
 }
 
+// loadAuthToken loads the authentication token from the daemon token file
+// Returns empty string if token file doesn't exist (backward compatibility)
+func (c *Client) loadAuthToken() string {
+	tokenFile := filepath.Join(filepath.Dir(c.socketPath), "daemon-auth-token")
+	data, err := os.ReadFile(tokenFile)
+	if err != nil {
+		// Token file doesn't exist - daemon might not have auth enabled
+		// or this is an old daemon version
+		return ""
+	}
+	return string(data)
+}
+
+// getAuthToken returns the cached auth token, loading it if necessary
+func (c *Client) getAuthToken() string {
+	if c.authToken == "" {
+		c.authToken = c.loadAuthToken()
+	}
+	return c.authToken
+}
+
 // Execute sends an RPC request and waits for a response
 func (c *Client) Execute(operation string, args interface{}) (*Response, error) {
 	return c.ExecuteWithCwd(operation, args, "")
@@ -187,6 +209,7 @@ func (c *Client) ExecuteWithCwd(operation string, args interface{}, cwd string) 
 		ClientVersion: ClientVersion,
 		Cwd:           cwd,
 		ExpectedDB:    c.dbPath, // Send expected database path for validation
+		AuthToken:     c.getAuthToken(), // Add authentication token
 	}
 
 	reqJSON, err := json.Marshal(req)

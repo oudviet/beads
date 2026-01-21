@@ -27,6 +27,7 @@ import (
 	"github.com/steveyegge/beads/internal/storage/factory"
 	"github.com/steveyegge/beads/internal/storage/memory"
 	"github.com/steveyegge/beads/internal/utils"
+	"github.com/steveyegge/beads/internal/validation"
 )
 
 var (
@@ -132,7 +133,10 @@ func getActorWithGit() string {
 
 	// Try git config user.name - the natural default for a git-native tool
 	if out, err := exec.Command("git", "config", "user.name").Output(); err == nil {
-		if gitUser := strings.TrimSpace(string(out)); gitUser != "" {
+		// Sanitize git output to prevent injection of control characters
+		gitUser := validation.SanitizeGitOutput(string(out))
+		gitUser = strings.TrimSpace(gitUser)
+		if gitUser != "" {
 			return gitUser
 		}
 	}
@@ -152,12 +156,17 @@ func getActorWithGit() string {
 func getOwner() string {
 	// Check GIT_AUTHOR_EMAIL first - this is set during git commit operations
 	if authorEmail := os.Getenv("GIT_AUTHOR_EMAIL"); authorEmail != "" {
-		return authorEmail
+		// Sanitize email to prevent injection
+		return validation.SanitizeEmail(authorEmail)
 	}
 
 	// Fall back to git config user.email - the natural default
 	if out, err := exec.Command("git", "config", "user.email").Output(); err == nil {
-		if gitEmail := strings.TrimSpace(string(out)); gitEmail != "" {
+		// Sanitize git output and email format
+		gitEmail := validation.SanitizeGitOutput(string(out))
+		gitEmail = strings.TrimSpace(gitEmail)
+		gitEmail = validation.SanitizeEmail(gitEmail)
+		if gitEmail != "" {
 			return gitEmail
 		}
 	}

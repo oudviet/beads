@@ -124,6 +124,17 @@ func (s *Server) handleRequest(req *Request) Response {
 		s.metrics.RecordRequest(req.Operation, latency)
 	}()
 
+	// Validate authentication token (skip for ping/health/metrics to allow diagnostics)
+	if s.auth != nil {
+		if err := s.auth.ValidateRequestAuth(req); err != nil {
+			s.metrics.RecordError(req.Operation)
+			return Response{
+				Success: false,
+				Error:   err.Error(),
+			}
+		}
+	}
+
 	// Validate database binding (skip for health/metrics to allow diagnostics)
 	if req.Operation != OpHealth && req.Operation != OpMetrics {
 		if err := s.validateDatabaseBinding(req); err != nil {

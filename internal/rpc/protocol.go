@@ -63,6 +63,7 @@ type Request struct {
 	Cwd           string          `json:"cwd,omitempty"`            // Working directory for database discovery
 	ClientVersion string          `json:"client_version,omitempty"` // Client version for compatibility checks
 	ExpectedDB    string          `json:"expected_db,omitempty"`    // Expected database path for validation (absolute)
+	AuthToken     string          `json:"auth_token,omitempty"`     // Authentication token for daemon security
 }
 
 // Response represents an RPC response from daemon to client

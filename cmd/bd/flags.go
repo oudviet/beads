@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/steveyegge/beads/internal/validation"
 )
 
 // registerCommonIssueFlags registers flags common to create and update commands.
@@ -114,7 +115,12 @@ func readBodyFile(filePath string) (string, error) {
 	if filePath == "-" {
 		reader = os.Stdin
 	} else {
-		// #nosec G304 - filePath comes from user flag, validated by caller
+		// Validate the file path before opening (CRITICAL: Prevents path traversal)
+		if err := validation.ValidateBodyFilePath(filePath); err != nil {
+			return "", fmt.Errorf("invalid file path: %w", err)
+		}
+
+		// Now safe to open - path has been validated
 		file, err := os.Open(filePath)
 		if err != nil {
 			return "", fmt.Errorf("failed to open file: %w", err)
