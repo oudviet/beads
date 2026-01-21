@@ -31,6 +31,7 @@ import (
 	// Import MySQL driver for server mode connections
 	_ "github.com/go-sql-driver/mysql"
 
+	"github.com/steveyegge/beads/internal/crypto"
 	"github.com/steveyegge/beads/internal/storage"
 )
 
@@ -48,6 +49,9 @@ type DoltStore struct {
 	committerEmail string
 	remote         string // Default remote for push/pull
 	branch         string // Current branch
+
+	// Security: keyring for credential management
+	keyring crypto.Keyring // Secure credential storage
 }
 
 // Config holds Dolt database configuration
@@ -152,6 +156,15 @@ func New(ctx context.Context, cfg *Config) (*DoltStore, error) {
 		branch:         "main",
 		readOnly:       cfg.ReadOnly,
 	}
+
+	// Initialize keyring for secure credential storage
+	keyringFile := filepath.Join(absPath, ".beads-keyring")
+	keyring, err := crypto.NewFileKeyring(keyringFile, absPath)
+	if err != nil {
+		// Log warning but continue - backward compatible with old encryption
+		fmt.Fprintf(os.Stderr, "Warning: failed to initialize keyring: %v\n", err)
+	}
+	store.keyring = keyring
 
 	// Initialize schema (skip for read-only mode)
 	if !cfg.ReadOnly {
