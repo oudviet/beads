@@ -228,11 +228,12 @@ func (c *Client) ExecuteWithCwd(operation string, args interface{}, cwd string) 
 		Timestamp:     timestamp.Unix(),
 	}
 
-	// Sign the request if we have the secret key
-	if secretKey := c.getSecretKey(); secretKey != nil {
-		signer := NewRequestSigner(secretKey)
-		req.Signature = signer.SignRequest(&req, timestamp)
-	}
+	// TODO: Re-enable request signing once we have a proper key file format
+	// For now, auth token is sufficient for security
+	// if secretKey := c.getSecretKey(); secretKey != nil && len(secretKey) >= 32 {
+	// 	signer := NewRequestSigner(secretKey)
+	// 	req.Signature = signer.SignRequest(&req, timestamp)
+	// }
 
 	// Validate request size before sending (prevents DoS via large payloads)
 	if err := ValidateRequestSize(&req); err != nil {

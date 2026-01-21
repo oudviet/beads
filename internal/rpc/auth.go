@@ -39,6 +39,11 @@ func NewAuthManager(socketPath string, startTime time.Time) (*AuthManager, error
 	// Generate auth token
 	am.token = am.generateToken()
 
+	// Save token to file so clients can read it
+	if err := am.saveToken(); err != nil {
+		return nil, fmt.Errorf("failed to save token: %w", err)
+	}
+
 	// Initialize request signer with the same secret key
 	am.signer = NewRequestSigner(am.secretKey)
 
@@ -63,6 +68,21 @@ func (am *AuthManager) loadOrGenerateSecret() error {
 	// Write secret to file with restricted permissions
 	if err := os.WriteFile(am.tokenFile, am.secretKey, 0600); err != nil {
 		return fmt.Errorf("failed to write secret: %w", err)
+	}
+
+	return nil
+}
+
+// saveToken writes the current authentication token to the token file
+// This allows clients to read the token for authentication
+func (am *AuthManager) saveToken() error {
+	am.mu.Lock()
+	defer am.mu.Unlock()
+
+	// Write the actual token (not the secret key) to the file
+	// The client reads this token to authenticate
+	if err := os.WriteFile(am.tokenFile, []byte(am.token), 0600); err != nil {
+		return fmt.Errorf("failed to write token: %w", err)
 	}
 
 	return nil
