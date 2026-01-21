@@ -4,6 +4,7 @@
 package validation
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"unicode/utf8"
@@ -182,7 +183,6 @@ func RedactJSON(jsonStr string) string {
 	}
 
 	result := jsonStr
-	lowerJSON := strings.ToLower(jsonStr)
 
 	for key := range sensitiveKeys {
 		// Look for "key": "value" pattern (case-insensitive key)

@@ -105,9 +105,9 @@ func (es *ErrorSanitizer) sanitizePaths(msg string) string {
 
 	// Hide home directory paths
 	homePatterns := []string{
-		regexp.QuotePOSIX("/home/[^/]+/"),
-		regexp.QuotePOSIX("/Users/[^/]+/"),
-		regexp.QuotePOSIX(`C:\Users\[^\\]+\`),
+		"/home/[^/]+/",
+		"/Users/[^/]+/",
+		`C:\\Users\\[^\\]+\\`,
 	}
 	for _, pattern := range homePatterns {
 		re := regexp.MustCompile(pattern)

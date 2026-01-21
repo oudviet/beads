@@ -41,7 +41,7 @@ func NewFileKeyring(keyFile string, dbPath string) (*FileKeyring, error) {
 	k := &FileKeyring{keyFile: keyFile}
 
 	// Try to load existing master key
-	if data, err := os.ReadFile(keyFile); err == nil {
+	if _, err := os.ReadFile(keyFile); err == nil {
 		// Existing keyring - derive master key from dbPath
 		k.masterKey = deriveKeyFromDBPath(dbPath, nil)
 		return k, nil

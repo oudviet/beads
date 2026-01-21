@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/steveyegge/beads/internal/crypto"
 	"github.com/steveyegge/beads/internal/storage"
@@ -419,8 +420,8 @@ func (s *DoltStore) RotateCredentials(ctx context.Context, peerName string, newU
 	peer.RotationInterval = rotationInterval
 	peer.UpdatedAt = now
 
-	// Save updated peer
-	if err := s.UpdateFederationPeer(ctx, peerName, peer); err != nil {
+	// Save updated peer (AddFederationPeer has upsert logic)
+	if err := s.AddFederationPeer(ctx, peer); err != nil {
 		return fmt.Errorf("failed to update peer: %w", err)
 	}
 
@@ -441,7 +442,7 @@ func (s *DoltStore) SetCredentialRotationInterval(ctx context.Context, peerName 
 	peer.RotationInterval = interval
 	peer.UpdatedAt = time.Now()
 
-	if err := s.UpdateFederationPeer(ctx, peerName, peer); err != nil {
+	if err := s.AddFederationPeer(ctx, peer); err != nil {
 		return fmt.Errorf("failed to update peer: %w", err)
 	}
 

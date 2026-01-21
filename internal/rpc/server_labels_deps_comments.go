@@ -240,7 +240,11 @@ func (s *Server) handleBatch(req *Request) Response {
 
 		resp := s.handleRequest(subReq)
 
-		results = append(results, BatchResult(resp))
+		results = append(results, BatchResult{
+			Success: resp.Success,
+			Data:    json.RawMessage(resp.Data),
+			Error:   resp.Error,
+		})
 
 		if !resp.Success {
 			break
