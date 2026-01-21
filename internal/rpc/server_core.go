@@ -65,6 +65,8 @@ type Server struct {
 	daemonMode   string
 	// Authentication manager for RPC security
 	auth *AuthManager
+	// Rate limiting for DoS protection
+	rateLimiter *RateLimiter
 }
 
 // Mutation event types
@@ -149,6 +151,9 @@ func NewServer(socketPath string, store storage.Storage, workspacePath string, d
 		fmt.Fprintf(os.Stderr, "Warning: failed to initialize auth manager: %v\n", err)
 	}
 	s.auth = auth
+
+	// Initialize rate limiter (100 requests per minute per client)
+	s.rateLimiter = NewRateLimiter(100, 1*time.Minute)
 
 	return s
 }

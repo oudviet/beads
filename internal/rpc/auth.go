@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// AuthManager handles daemon authentication
+// AuthManager handles daemon authentication and request signing
 type AuthManager struct {
 	mu           sync.RWMutex
 	secretKey    []byte
@@ -20,6 +20,7 @@ type AuthManager struct {
 	tokenFile    string
 	startTime    time.Time
 	socketPath   string
+	signer       *RequestSigner
 }
 
 // NewAuthManager creates a new authentication manager
@@ -37,6 +38,9 @@ func NewAuthManager(socketPath string, startTime time.Time) (*AuthManager, error
 
 	// Generate auth token
 	am.token = am.generateToken()
+
+	// Initialize request signer with the same secret key
+	am.signer = NewRequestSigner(am.secretKey)
 
 	return am, nil
 }
@@ -80,6 +84,13 @@ func (am *AuthManager) GetToken() string {
 	return am.token
 }
 
+// GetSecretKey returns the secret key for signing operations
+func (am *AuthManager) GetSecretKey() []byte {
+	am.mu.RLock()
+	defer am.mu.RUnlock()
+	return am.secretKey
+}
+
 // ValidateToken checks if the provided token matches the expected token
 func (am *AuthManager) ValidateToken(token string) bool {
 	am.mu.RLock()
@@ -87,12 +98,32 @@ func (am *AuthManager) ValidateToken(token string) bool {
 	return hmac.Equal([]byte(am.token), []byte(token))
 }
 
+// SignRequest signs a request with HMAC
+func (am *AuthManager) SignRequest(req *Request, timestamp time.Time) string {
+	return am.signer.SignRequest(req, timestamp)
+}
+
+// VerifyRequest verifies a request's HMAC signature
+func (am *AuthManager) VerifyRequest(req *Request, timestamp time.Time, signature string) error {
+	return am.signer.VerifyRequest(req, timestamp, signature)
+}
+
+// SignResponse signs a response with HMAC
+func (am *AuthManager) SignResponse(resp *Response, timestamp time.Time) string {
+	return am.signer.SignResponse(resp, timestamp)
+}
+
+// VerifyResponse verifies a response's HMAC signature
+func (am *AuthManager) VerifyResponse(resp *Response, timestamp time.Time, signature string) error {
+	return am.signer.VerifyResponse(resp, timestamp, signature)
+}
+
 // Cleanup removes the secret key file
 func (am *AuthManager) Cleanup() error {
 	return os.Remove(am.tokenFile)
 }
 
-// ValidateRequestAuth validates the authentication in a request
+// ValidateRequestAuth validates the authentication and signature in a request
 // Operations that skip authentication: ping, health, metrics (for diagnostics)
 func (am *AuthManager) ValidateRequestAuth(req *Request) error {
 	// Skip auth for diagnostic operations
@@ -107,6 +138,14 @@ func (am *AuthManager) ValidateRequestAuth(req *Request) error {
 
 	if !am.ValidateToken(req.AuthToken) {
 		return fmt.Errorf("authentication failed: invalid auth_token")
+	}
+
+	// Check signature if timestamp is provided
+	if req.Timestamp > 0 && req.Signature != "" {
+		timestamp := time.Unix(req.Timestamp, 0)
+		if err := am.VerifyRequest(req, timestamp, req.Signature); err != nil {
+			return fmt.Errorf("signature verification failed: %w", err)
+		}
 	}
 
 	return nil

@@ -8,6 +8,7 @@ import (
 	"math"
 	"net"
 	"os"
+	"strings"
 	"text/template"
 	"time"
 
@@ -35,9 +36,11 @@ type HaikuClient struct {
 	initialBackoff time.Duration
 	auditEnabled   bool
 	auditActor     string
+	apiKey         string // Stored for error messages (never logged)
 }
 
 // NewHaikuClient creates a new Haiku API client. Env var ANTHROPIC_API_KEY takes precedence over explicit apiKey.
+// SECURITY: The API key is never logged. It is stored only in memory and passed directly to the Anthropic client.
 func NewHaikuClient(apiKey string) (*HaikuClient, error) {
 	envKey := os.Getenv("ANTHROPIC_API_KEY")
 	if envKey != "" {
@@ -45,6 +48,13 @@ func NewHaikuClient(apiKey string) (*HaikuClient, error) {
 	}
 	if apiKey == "" {
 		return nil, fmt.Errorf("%w: set ANTHROPIC_API_KEY environment variable or provide via config", ErrAPIKeyRequired)
+	}
+
+	// Validate API key format before making any API calls
+	// Anthropic API keys start with "sk-ant-" followed by alphanumeric characters
+	if len(apiKey) < 20 || !strings.HasPrefix(apiKey, "sk-ant-") {
+		// Don't include the actual key in error messages - it might be logged
+		return nil, fmt.Errorf("%w: invalid API key format (must start with 'sk-ant-')", ErrAPIKeyRequired)
 	}
 
 	client := anthropic.NewClient(option.WithAPIKey(apiKey))
@@ -60,6 +70,7 @@ func NewHaikuClient(apiKey string) (*HaikuClient, error) {
 		tier1Template:  tier1Tmpl,
 		maxRetries:     maxRetries,
 		initialBackoff: initialBackoff,
+		apiKey:         apiKey, // Stored only for internal use (never logged)
 	}, nil
 }
 

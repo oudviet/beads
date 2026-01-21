@@ -356,3 +356,129 @@ func (s *DoltStore) PullWithCredentials(ctx context.Context, remoteName string) 
 
 // FederationPeer is an alias for storage.FederationPeer for convenience.
 type FederationPeer = storage.FederationPeer
+
+// Credential rotation utilities
+
+// CheckCredentialExpiry checks if a peer's credentials are expired or expiring soon
+// Returns:
+//   - expired: true if credentials are already expired
+//   - expiringSoon: true if credentials expire within the warning period (7 days)
+//   - error: any error during check
+func (s *DoltStore) CheckCredentialExpiry(ctx context.Context, peerName string) (expired, expiringSoon bool, err error) {
+	peer, err := s.GetFederationPeer(ctx, peerName)
+	if err != nil {
+		return false, false, fmt.Errorf("failed to get peer: %w", err)
+	}
+	if peer == nil {
+		return false, false, fmt.Errorf("peer not found: %s", peerName)
+	}
+
+	// No expiry set
+	if peer.CredentialExpiresAt == nil {
+		return false, false, nil
+	}
+
+	now := time.Now()
+	untilExpiry := peer.CredentialExpiresAt.Sub(now)
+
+	// Check if expired
+	expired = now.After(*peer.CredentialExpiresAt)
+
+	// Check if expiring soon (within 7 days)
+	warningPeriod := 7 * 24 * time.Hour
+	expiringSoon = untilExpiry > 0 && untilExpiry < warningPeriod
+
+	return expired, expiringSoon, nil
+}
+
+// RotateCredentials rotates credentials for a peer by setting a new expiry time
+// This should be called when updating username/password
+func (s *DoltStore) RotateCredentials(ctx context.Context, peerName string, newUsername, newPassword string, rotationInterval time.Duration) error {
+	peer, err := s.GetFederationPeer(ctx, peerName)
+	if err != nil {
+		return fmt.Errorf("failed to get peer: %w", err)
+	}
+	if peer == nil {
+		return fmt.Errorf("peer not found: %s", peerName)
+	}
+
+	now := time.Now()
+
+	// Calculate new expiry time
+	var newExpiry *time.Time
+	if rotationInterval > 0 {
+		expiryTime := now.Add(rotationInterval)
+		newExpiry = &expiryTime
+	}
+
+	// Update peer with new credentials and rotation info
+	peer.Username = newUsername
+	peer.Password = newPassword
+	peer.LastRotatedAt = &now
+	peer.CredentialExpiresAt = newExpiry
+	peer.RotationInterval = rotationInterval
+	peer.UpdatedAt = now
+
+	// Save updated peer
+	if err := s.UpdateFederationPeer(ctx, peerName, peer); err != nil {
+		return fmt.Errorf("failed to update peer: %w", err)
+	}
+
+	return nil
+}
+
+// SetCredentialRotationInterval sets the rotation interval for a peer's credentials
+// interval of 0 means no automatic rotation
+func (s *DoltStore) SetCredentialRotationInterval(ctx context.Context, peerName string, interval time.Duration) error {
+	peer, err := s.GetFederationPeer(ctx, peerName)
+	if err != nil {
+		return fmt.Errorf("failed to get peer: %w", err)
+	}
+	if peer == nil {
+		return fmt.Errorf("peer not found: %s", peerName)
+	}
+
+	peer.RotationInterval = interval
+	peer.UpdatedAt = time.Now()
+
+	if err := s.UpdateFederationPeer(ctx, peerName, peer); err != nil {
+		return fmt.Errorf("failed to update peer: %w", err)
+	}
+
+	return nil
+}
+
+// GetExpiredCredentials returns a list of peers with expired or expiring credentials
+// Useful for administrative dashboards and alerts
+func (s *DoltStore) GetExpiredCredentials(ctx context.Context) ([]string, []string, error) {
+	peers, err := s.ListFederationPeers(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to list peers: %w", err)
+	}
+
+	var expired []string
+	var expiringSoon []string
+
+	for _, peer := range peers {
+		if peer.CredentialExpiresAt == nil {
+			continue
+		}
+
+		now := time.Now()
+		untilExpiry := peer.CredentialExpiresAt.Sub(now)
+
+		// Check if expired
+		if now.After(*peer.CredentialExpiresAt) {
+			expired = append(expired, peer.Name)
+			continue
+		}
+
+		// Check if expiring soon (within 7 days)
+		warningPeriod := 7 * 24 * time.Hour
+		if untilExpiry > 0 && untilExpiry < warningPeriod {
+			expiringSoon = append(expiringSoon, peer.Name)
+		}
+	}
+
+	return expired, expiringSoon, nil
+}

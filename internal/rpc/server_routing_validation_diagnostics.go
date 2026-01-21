@@ -12,8 +12,12 @@ import (
 	"time"
 
 	"github.com/steveyegge/beads/internal/types"
+	"github.com/steveyegge/beads/internal/validation"
 	"golang.org/x/mod/semver"
 )
+
+// Global error sanitizer for RPC responses
+var errorSanitizer = validation.NewErrorSanitizer()
 
 // checkVersionCompatibility validates client version against server version
 // Returns error if versions are incompatible
@@ -130,8 +134,32 @@ func (s *Server) handleRequest(req *Request) Response {
 			s.metrics.RecordError(req.Operation)
 			return Response{
 				Success: false,
-				Error:   err.Error(),
+				Error:   errorSanitizer.SanitizeError(err),
 			}
+		}
+	}
+
+	// Check rate limit (skip for ping/health/metrics)
+	if s.rateLimiter != nil && req.Operation != OpPing && req.Operation != OpHealth && req.Operation != OpMetrics {
+		clientID := req.Cwd // Use working directory as client identifier
+		if clientID == "" {
+			clientID = "unknown"
+		}
+		if !s.rateLimiter.Allow(clientID) {
+			s.metrics.RecordError(req.Operation)
+			return Response{
+				Success: false,
+				Error:   "rate limit exceeded, please try again later",
+			}
+		}
+	}
+
+	// Validate request size (prevents DoS via large payloads)
+	if err := ValidateRequestSize(req); err != nil {
+		s.metrics.RecordError(req.Operation)
+		return Response{
+			Success: false,
+			Error:   errorSanitizer.SanitizeError(err),
 		}
 	}
 
@@ -141,7 +169,7 @@ func (s *Server) handleRequest(req *Request) Response {
 			s.metrics.RecordError(req.Operation)
 			return Response{
 				Success: false,
-				Error:   err.Error(),
+				Error:   errorSanitizer.SanitizeError(err),
 			}
 		}
 	}
@@ -152,7 +180,7 @@ func (s *Server) handleRequest(req *Request) Response {
 			s.metrics.RecordError(req.Operation)
 			return Response{
 				Success: false,
-				Error:   err.Error(),
+				Error:   errorSanitizer.SanitizeError(err),
 			}
 		}
 	}

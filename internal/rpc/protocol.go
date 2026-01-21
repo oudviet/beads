@@ -64,13 +64,17 @@ type Request struct {
 	ClientVersion string          `json:"client_version,omitempty"` // Client version for compatibility checks
 	ExpectedDB    string          `json:"expected_db,omitempty"`    // Expected database path for validation (absolute)
 	AuthToken     string          `json:"auth_token,omitempty"`     // Authentication token for daemon security
+	Timestamp     int64           `json:"timestamp,omitempty"`     // Request timestamp for signature verification
+	Signature     string          `json:"signature,omitempty"`     // HMAC signature for request integrity
 }
 
 // Response represents an RPC response from daemon to client
 type Response struct {
-	Success bool            `json:"success"`
-	Data    json.RawMessage `json:"data,omitempty"`
-	Error   string          `json:"error,omitempty"`
+	Success   bool            `json:"success"`
+	Data      json.RawMessage `json:"data,omitempty"`
+	Error     string          `json:"error,omitempty"`
+	Timestamp int64           `json:"timestamp,omitempty"` // Response timestamp for signature verification
+	Signature string          `json:"signature,omitempty"` // HMAC signature for response integrity
 }
 
 // CreateArgs represents arguments for the create operation

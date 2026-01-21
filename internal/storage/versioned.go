@@ -212,14 +212,18 @@ type SyncStatus struct {
 // FederationPeer represents a remote peer with authentication credentials.
 // Used for peer-to-peer Dolt remotes between Gas Towns with SQL user auth.
 type FederationPeer struct {
-	Name        string     // Unique name for this peer (used as remote name)
-	RemoteURL   string     // Dolt remote URL (e.g., http://host:port/org/db)
-	Username    string     // SQL username for authentication
-	Password    string     // Password (decrypted, not stored directly)
-	Sovereignty string     // Sovereignty tier: T1, T2, T3, T4
-	LastSync    *time.Time // Last successful sync time
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	Name            string     // Unique name for this peer (used as remote name)
+	RemoteURL       string     // Dolt remote URL (e.g., http://host:port/org/db)
+	Username        string     // SQL username for authentication
+	Password        string     // Password (decrypted, not stored directly)
+	Sovereignty     string     // Sovereignty tier: T1, T2, T3, T4
+	LastSync        *time.Time // Last successful sync time
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	// Credential rotation fields
+	CredentialExpiresAt *time.Time // Optional expiry time for credentials (nil = no expiry)
+	LastRotatedAt       *time.Time // Last time credentials were rotated
+	RotationInterval    time.Duration // How often to rotate credentials (0 = disabled)
 }
 
 // IsFederated checks if a storage instance supports federation.

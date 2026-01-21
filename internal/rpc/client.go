@@ -185,6 +185,18 @@ func (c *Client) getAuthToken() string {
 	return c.authToken
 }
 
+// getSecretKey loads the secret key from the daemon token file for signing
+// Returns nil if token file doesn't exist (backward compatibility)
+func (c *Client) getSecretKey() []byte {
+	tokenFile := filepath.Join(filepath.Dir(c.socketPath), "daemon-auth-token")
+	data, err := os.ReadFile(tokenFile)
+	if err != nil {
+		// Token file doesn't exist - daemon might not have auth enabled
+		return nil
+	}
+	return data
+}
+
 // Execute sends an RPC request and waits for a response
 func (c *Client) Execute(operation string, args interface{}) (*Response, error) {
 	return c.ExecuteWithCwd(operation, args, "")
@@ -202,6 +214,9 @@ func (c *Client) ExecuteWithCwd(operation string, args interface{}, cwd string) 
 		cwd, _ = os.Getwd()
 	}
 
+	// Get current timestamp for signing
+	timestamp := time.Now()
+
 	req := Request{
 		Operation:     operation,
 		Args:          argsJSON,
@@ -210,6 +225,18 @@ func (c *Client) ExecuteWithCwd(operation string, args interface{}, cwd string) 
 		Cwd:           cwd,
 		ExpectedDB:    c.dbPath, // Send expected database path for validation
 		AuthToken:     c.getAuthToken(), // Add authentication token
+		Timestamp:     timestamp.Unix(),
+	}
+
+	// Sign the request if we have the secret key
+	if secretKey := c.getSecretKey(); secretKey != nil {
+		signer := NewRequestSigner(secretKey)
+		req.Signature = signer.SignRequest(&req, timestamp)
+	}
+
+	// Validate request size before sending (prevents DoS via large payloads)
+	if err := ValidateRequestSize(&req); err != nil {
+		return nil, fmt.Errorf("request size validation failed: %w", err)
 	}
 
 	reqJSON, err := json.Marshal(req)
