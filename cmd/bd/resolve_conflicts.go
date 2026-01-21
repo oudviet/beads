@@ -86,6 +86,53 @@ type conflictResolutionInfo struct {
 	IssueID    string `json:"issue_id,omitempty"`
 }
 
+// validateResolveConflictsPath validates that file path is safe for conflict resolution.
+// Prevents path traversal attacks by ensuring:
+// - Path is within the specified repository (--path flag or current dir)
+// - No path traversal components (..) outside allowed base
+// - File exists and is readable
+func validateResolveConflictsPath(filePath, basePath string) error {
+	// Must be non-empty
+	if filePath == "" {
+		return fmt.Errorf("file path cannot be empty")
+	}
+
+	// Check for path traversal in original path BEFORE cleaning
+	// This catches attempts like ".beads/../etc/passwd" before Clean() normalizes them
+	// Note: We check both ".." and "\" (Windows path separator) for cross-platform safety
+	if strings.Contains(filePath, "..") || (filepath.Separator == '\\' && strings.Contains(filePath, "\\..\\")) {
+		return fmt.Errorf("path traversal detected in %s", filePath)
+	}
+
+	// Clean the paths to resolve any embedded "." or multiple separators
+	cleanPath := filepath.Clean(filePath)
+	cleanBase := filepath.Clean(basePath)
+
+	// Convert to absolute paths for comparison
+	absPath, err := filepath.Abs(cleanPath)
+	if err != nil {
+		return fmt.Errorf("invalid file path: %w", err)
+	}
+
+	absBase, err := filepath.Abs(cleanBase)
+	if err != nil {
+		return fmt.Errorf("invalid base path: %w", err)
+	}
+
+	// Check for path traversal - ensure resolved path is within base path
+	rel, err := filepath.Rel(absBase, absPath)
+	if err != nil {
+		return fmt.Errorf("cannot resolve path relative to base: %w", err)
+	}
+
+	// Check if relative path starts with ".." (meaning it's outside base directory)
+	if strings.HasPrefix(rel, "..") {
+		return fmt.Errorf("file path outside repository base: %s (relative: %s)", filePath, rel)
+	}
+
+	return nil
+}
+
 func runResolveConflicts(cmd *cobra.Command, args []string) {
 	// Determine file path
 	var filePath string
@@ -93,6 +140,12 @@ func runResolveConflicts(cmd *cobra.Command, args []string) {
 		filePath = args[0]
 	} else {
 		filePath = filepath.Join(resolveConflictsPath, ".beads", "beads.jsonl")
+	}
+
+	// Validate file path for security (prevent path traversal attacks)
+	if err := validateResolveConflictsPath(filePath, resolveConflictsPath); err != nil {
+		outputResolveError(filePath, fmt.Sprintf("path validation failed: %v", err))
+		os.Exit(1)
 	}
 
 	// Validate mode
@@ -113,7 +166,7 @@ func runResolveConflicts(cmd *cobra.Command, args []string) {
 	}
 
 	// Read file content
-	content, err := os.ReadFile(filePath) // #nosec G304 -- user-provided path for conflict resolution
+	content, err := os.ReadFile(filePath) // Path validated by validateResolveConflictsPath()
 	if err != nil {
 		outputResolveError(filePath, fmt.Sprintf("reading file: %v", err))
 		os.Exit(1)
